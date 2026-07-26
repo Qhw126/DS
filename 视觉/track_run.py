@@ -7,54 +7,29 @@ sensor = Sensor(id=2)
 sensor.reset()
 sensor.set_framesize(width=320, height=240)
 sensor.set_pixformat(Sensor.RGB565)
-Display.init(Display.ST7701, width=800, height=480, to_ide=True, quality=50)
+Display.init(Display.ST7701, width=800, height=480, to_ide=True, quality=30)
 MediaManager.init()
 sensor.run()
 time.sleep_ms(300)
 
-# LAB阈值 (Lmin,Lmax, Amin,Amax, Bmin,Bmax) - 红色
-TH = (23, 43, -19, 49, -7, 36)
-
-def restart_sensor():
-    print("重启传感器...")
-    try:
-        sensor.stop()
-    except Exception:
-        pass
-    time.sleep_ms(100)
-    sensor.run()
-    time.sleep_ms(300)
-    print("传感器重启完成")
+TH = (21, 49, 9, 68, -2, 51)
 
 clock = time.clock()
 while True:
     clock.tick()
     try:
         img = sensor.snapshot()
-    except Exception as e:
-        print("采图失败:", e)
-        restart_sensor()
+    except Exception:
         gc.collect()
         continue
 
-    # 在彩色图上找红色色块
-    blobs = img.find_blobs([TH], pixels_threshold=30, merge=True)
+    # 二值化 → 转灰度（画面还是黑白，格式变灰度）
+    img = img.binary([TH]).to_grayscale()
 
-    off = 0.0
-    if blobs:
-        cx, tw = 0, 0
-        for b in blobs:
-            if b.cy() > 80:
-                cx += b.cx() * b.pixels()
-                tw += b.pixels()
-        if tw > 50:
-            off = (cx / tw - 160) / 160
+    # 找白线（[(255,255)] 对灰度图有效）
+    line = img.get_regression([(255, 255)])
+    off = ((line.x1() + line.x2()) / 2 - 160) / 160 if line else 0.0
 
-    # 二值化显示（重要：赋值回来！）
-    img = img.binary([TH])
-
-    # OSD
-    img.draw_string_advanced(10, 10, 28, "OFF:%+.3f" % off, color=(255, 255, 255))
-
+    img.draw_string_advanced(10, 10, 28, "OFF:%+.3f" % off, color=255)
     Display.show_image(img, x=240, y=120)
     gc.collect()
