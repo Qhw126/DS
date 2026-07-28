@@ -1,0 +1,152 @@
+#include "Motor.h"
+#include "PID.h"
+
+/* CC 通道索引表 */
+static const uint8_t motor_cc_idx[] = {
+    GPIO_PWM_0_C0_IDX,  /* MOTOR_B → CC0 */
+    GPIO_PWM_0_C1_IDX,  /* MOTOR_C → CC1 */
+    GPIO_PWM_0_C2_IDX,  /* MOTOR_A → CC2 */
+    GPIO_PWM_0_C3_IDX,  /* MOTOR_D → CC3 */
+};
+
+/*
+ * 设置电机A方向：正转
+ * AIN1=1, AIN2=0
+ */
+void Motor_SetForward(Motor_ID id)
+{
+    if (id == MOTOR_A)
+    {
+        DL_GPIO_setPins(AIN_PORT, AIN_AIN1_PIN);     /* AIN1 = 1 */
+        DL_GPIO_clearPins(AIN_PORT, AIN_AIN2_PIN);   /* AIN2 = 0 */
+    }
+    else if (id == MOTOR_B)
+    {
+        DL_GPIO_setPins(BIN_PORT, BIN_BIN1_PIN);     /* BIN1 = 1 */
+        DL_GPIO_clearPins(BIN_PORT, BIN_BIN2_PIN);   /* BIN2 = 0 */
+    }
+}
+
+/*
+ * 设置电机方向：反转
+ * AIN1=0, AIN2=1
+ */
+void Motor_SetReverse(Motor_ID id)
+{
+    if (id == MOTOR_A)
+    {
+        DL_GPIO_clearPins(AIN_PORT, AIN_AIN1_PIN);   /* AIN1 = 0 */
+        DL_GPIO_setPins(AIN_PORT, AIN_AIN2_PIN);     /* AIN2 = 1 */
+    }
+    else if (id == MOTOR_B)
+    {
+        DL_GPIO_clearPins(BIN_PORT, BIN_BIN1_PIN);   /* BIN1 = 0 */
+        DL_GPIO_setPins(BIN_PORT, BIN_BIN2_PIN);     /* BIN2 = 1 */
+    }
+}
+
+/*
+ * 电机刹车
+ * AIN1=0, AIN2=0
+ */
+void Motor_Brake(Motor_ID id)
+{
+    if (id == MOTOR_A)
+    {
+        DL_GPIO_clearPins(AIN_PORT, AIN_AIN1_PIN);   /* AIN1 = 0 */
+        DL_GPIO_clearPins(AIN_PORT, AIN_AIN2_PIN);   /* AIN2 = 0 */
+    }
+    else if (id == MOTOR_B)
+    {
+        DL_GPIO_clearPins(BIN_PORT, BIN_BIN1_PIN);   /* BIN1 = 0 */
+        DL_GPIO_clearPins(BIN_PORT, BIN_BIN2_PIN);   /* BIN2 = 0 */
+    }
+}
+
+/*
+ * 电机初始化
+ */
+void Motor_Init(void)
+{
+    Motor_StopAll();
+}
+
+/*
+ * 设置电机速度
+ * id:    MOTOR_A 或 MOTOR_B
+ * speed: -1000 ~ +1000
+ *        正值 → 正转
+ *        负值 → 反转
+ *        0    → 停止
+*/
+void Motor_SetSpeed(Motor_ID id, int16_t speed)
+{
+    if (id > MOTOR_MAX) return;
+
+    /* 限幅 */
+    if (speed > MOTOR_PWM_PERIOD)  speed = MOTOR_PWM_PERIOD;
+    if (speed < -MOTOR_PWM_PERIOD) speed = -MOTOR_PWM_PERIOD;
+    /* 设置方向 */
+    if (speed > 0)
+        Motor_SetForward(id);
+    else if (speed < 0)
+        Motor_SetReverse(id);
+    else
+        Motor_Brake(id);
+
+    /* 取绝对值作为占空比 */
+    uint16_t duty = (speed < 0) ? -speed : speed;
+
+    /* 设置 PWM 占空比 */
+    DL_TimerG_setCaptureCompareValue(PWM_0_INST, duty, motor_cc_idx[id]);
+}
+
+/*
+ * 停止单个电机（PWM=0，方向保持）
+ */
+void Motor_Stop(Motor_ID id)
+{
+    if (id > MOTOR_MAX) return;
+    DL_TimerG_setCaptureCompareValue(PWM_0_INST, 0, motor_cc_idx[id]);
+}
+
+/*
+ * 停止所有电机
+ */
+void Motor_StopAll(void)
+{
+    Motor_Stop(MOTOR_A);
+    Motor_Stop(MOTOR_B);
+}
+
+/*
+ * 双电机统一控制（对齐参考工程 motor()）
+ * 限幅 → 设方向 → 设 PID Target
+ * PWM 由 PID 中断中的 Motor_SetSpeed() 控制
+ */
+void motor(int Motor_1, int Motor_2)
+{
+    /* 电机A 限幅 */
+    if (Motor_1 > 200)       Motor_1 = 200;
+    else if (Motor_1 < -30)  Motor_1 = -30;
+    PID_MotorA.Target = (float)Motor_1;
+
+    if (Motor_1 > 0)
+        Motor_SetForward(MOTOR_A);
+    else if (Motor_1 < 0)
+        Motor_SetReverse(MOTOR_A);
+    else
+        Motor_Brake(MOTOR_A);
+
+    /* 电机B 限幅 */
+    if (Motor_2 > 200)       Motor_2 = 200;
+    else if (Motor_2 < -30)  Motor_2 = -30;
+    PID_MotorB.Target = (float)Motor_2;
+
+    if (Motor_2 > 0)
+        Motor_SetForward(MOTOR_B);
+    else if (Motor_2 < 0)
+        Motor_SetReverse(MOTOR_B);
+    else
+        Motor_Brake(MOTOR_B);
+}
