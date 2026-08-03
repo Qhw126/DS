@@ -72,16 +72,17 @@ int main(void)
     Delay_ms(3000);
 	
     Motor_MoveRelative(MOTOR_CW, 8.0f);      /* 正转4度 */
-    Delay_ms(600);                        
+    Delay_ms(570);                        
 	
-    Motor_MoveRelative(MOTOR_CCW, 10.0f);     /* 反转4度 */
-    Delay_ms(1450);                         
+    Motor_MoveRelative(MOTOR_CCW, 15.0f);     /* 反转4度 */
+    Delay_ms(700);                         
 	
-	Motor_MoveRelative(MOTOR_CW, 9.0f);      /* 正转4度 */
-    Delay_ms(500); 
+	Motor_MoveRelative(MOTOR_CW, 13.0f);      /* 正转4度 */
+    Delay_ms(800); 
 	
     Motor_GoZero();                         /* 再回到硬件保存的0点 */
     Delay_ms(600);
+
 
     while (1)
     {
